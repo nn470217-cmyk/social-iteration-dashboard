@@ -40,8 +40,12 @@ export interface GeneratedPack {
   threadsCopies: string[];
   igStories: string[];
   imageTitles: string[];
+  imagePrompts: string[];
+  imageUrls: string[];
   videoOpenings: string[];
+  videoScripts: string[];
   ctas: string[];
+  source: "local" | "ai";
 }
 
 export interface AnalysisResult {

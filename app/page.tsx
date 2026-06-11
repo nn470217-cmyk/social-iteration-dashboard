@@ -115,6 +115,8 @@ export default function Home() {
   const [records, setRecords] = useState<ContentRecord[]>([]);
   const [draft, setDraft] = useState<ContentRecord>(newRecord());
   const [copied, setCopied] = useState("");
+  const [aiPack, setAiPack] = useState<GeneratedPack | null>(null);
+  const [aiStatus, setAiStatus] = useState("");
 
   useEffect(() => {
     setRecords(loadRecords());
@@ -182,11 +184,39 @@ export default function Home() {
   }
 
   async function copyGenerated() {
-    const text = packToText(analysis.generated);
+    const text = packToText(aiPack ?? analysis.generated);
     await navigator.clipboard.writeText(text);
     setCopied("已複製下一輪文案");
     setTimeout(() => setCopied(""), 1600);
   }
+
+  async function generateAiIteration() {
+    setAiStatus("AI 產生中...");
+    const response = await fetch("/api/ai-iterate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        summary: {
+          bestTopic: analysis.topicRanking[0]?.name,
+          bestCta: analysis.ctaRanking[0]?.name,
+          keywords: analysis.keywordRanking.slice(0, 6).map((item) => item.name),
+          highFeatures: analysis.highFeatures,
+          lowProblems: analysis.lowProblems
+        }
+      })
+    });
+    const data = await response.json();
+    if (data.ok && data.generated) {
+      setAiPack(data.generated as GeneratedPack);
+      setAiStatus("AI 迭代素材已產生");
+    } else {
+      setAiPack(analysis.generated);
+      setAiStatus("AI API 暫時無法回應，已改用本地規則產出");
+    }
+    setTimeout(() => setAiStatus(""), 2200);
+  }
+
+  const outputPack = aiPack ?? analysis.generated;
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
@@ -206,11 +236,13 @@ export default function Home() {
             <div className="flex flex-wrap gap-2">
               <Button onClick={loadDemo} icon={<RefreshCw size={18} />}>載入範例</Button>
               <Button onClick={exportCsv} icon={<Download size={18} />}>匯出 CSV</Button>
+              <Button onClick={generateAiIteration} icon={<Sparkles size={18} />} primary>AI 迭代產出</Button>
               <Button onClick={copyGenerated} icon={<Copy size={18} />} primary>複製下一輪文案</Button>
               <Button onClick={clearAll} icon={<Trash2 size={18} />}>清空</Button>
             </div>
           </div>
           {copied && <p className="mt-3 text-sm font-bold text-gold">{copied}</p>}
+          {aiStatus && <p className="mt-3 text-sm font-bold text-gold">{aiStatus}</p>}
         </header>
 
         <section className="grid gap-3 md:grid-cols-5">
@@ -274,13 +306,20 @@ export default function Home() {
 
             <Panel title="下一輪素材產出" icon={<MessageCircle size={19} />}>
               <div className="mb-4 flex flex-wrap gap-2">
+                <Button onClick={generateAiIteration} icon={<Sparkles size={18} />} primary>用 AI 重新迭代</Button>
                 <Button onClick={copyGenerated} icon={<Copy size={18} />} primary>全部複製</Button>
+                <span className="inline-flex min-h-11 items-center rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-bold text-muted">
+                  來源：{outputPack.source === "ai" ? "免費 AI API" : "本地規則"}
+                </span>
               </div>
-              <GeneratedSection title="Threads 文案" items={analysis.generated.threadsCopies} />
-              <GeneratedSection title="IG 限動文案" items={analysis.generated.igStories} />
-              <GeneratedSection title="圖片主標" items={analysis.generated.imageTitles} />
-              <GeneratedSection title="影片前三秒開頭" items={analysis.generated.videoOpenings} />
-              <GeneratedSection title="CTA" items={analysis.generated.ctas} />
+              <GeneratedSection title="Threads 文案" items={outputPack.threadsCopies} />
+              <GeneratedSection title="IG 限動文案" items={outputPack.igStories} />
+              <GeneratedSection title="圖片主標" items={outputPack.imageTitles} />
+              <GeneratedSection title="圖片生成提示詞" items={outputPack.imagePrompts} />
+              <ImagePreviewSection urls={outputPack.imageUrls} />
+              <GeneratedSection title="影片前三秒開頭" items={outputPack.videoOpenings} />
+              <GeneratedSection title="影片腳本 / 分鏡" items={outputPack.videoScripts} />
+              <GeneratedSection title="CTA" items={outputPack.ctas} />
             </Panel>
 
             <Panel title="內容資料表" icon={<BarChart3 size={19} />}>
@@ -472,6 +511,27 @@ function GeneratedSection({ title, items }: { title: string; items: string[] }) 
   );
 }
 
+function ImagePreviewSection({ urls }: { urls: string[] }) {
+  return (
+    <div className="mb-5">
+      <h3 className="mb-2 text-base font-black text-gold">AI 圖片預覽連結</h3>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {urls.map((url, index) => (
+          <div key={url} className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <img src={url} alt={`AI image ${index + 1}`} className="aspect-[4/5] w-full rounded-md object-cover" />
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <a href={url} target="_blank" className="text-xs font-bold text-gold underline" rel="noreferrer">
+                開啟圖片
+              </a>
+              <CopyButton value={url} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Badge({ label }: { label: string }) {
   const styles: Record<string, string> = {
     "爆款": "bg-gold text-black",
@@ -495,10 +555,15 @@ function packToText(pack: GeneratedPack) {
     threadsCopies: "Threads 文案",
     igStories: "IG 限動文案",
     imageTitles: "圖片主標",
+    imagePrompts: "圖片生成提示詞",
+    imageUrls: "AI 圖片連結",
     videoOpenings: "影片前三秒開頭",
-    ctas: "CTA"
+    videoScripts: "影片腳本 / 分鏡",
+    ctas: "CTA",
+    source: "產出來源"
   };
   return Object.entries(pack)
-    .map(([key, items]) => `## ${labels[key as keyof GeneratedPack]}\n${items.map((item, index) => `${index + 1}. ${item}`).join("\n\n")}`)
+    .filter(([key]) => key !== "source")
+    .map(([key, items]) => `## ${labels[key as keyof GeneratedPack]}\n${(items as string[]).map((item, index) => `${index + 1}. ${item}`).join("\n\n")}`)
     .join("\n\n");
 }

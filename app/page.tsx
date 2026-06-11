@@ -26,8 +26,12 @@ const sourceTypes: SourceType[] = ["Sports News RSS", "YouTube RSS", "Platform A
 const contentTypes: ContentType[] = ["文章", "圖片", "影片", "限動"];
 const rssPresets = [
   { label: "Google News NBA", url: "https://news.google.com/rss/search?q=NBA%20sports%20news%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "NBA 國外快訊" },
+  { label: "NBA 球星熱點", url: "https://news.google.com/rss/search?q=LeBron%20Curry%20Doncic%20Jokic%20NBA%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "NBA 球星迷因" },
   { label: "Google News MLB", url: "https://news.google.com/rss/search?q=MLB%20sports%20news%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "MLB 國外快訊" },
+  { label: "大谷/道奇/洋基", url: "https://news.google.com/rss/search?q=Ohtani%20Dodgers%20Yankees%20MLB%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "MLB 球星熱點" },
   { label: "Google News Soccer", url: "https://news.google.com/rss/search?q=soccer%20sports%20news%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "足球國外快訊" },
+  { label: "足球巨星", url: "https://news.google.com/rss/search?q=Messi%20Ronaldo%20Mbappe%20football%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "足球巨星話題" },
+  { label: "裁判爭議/迷因", url: "https://news.google.com/rss/search?q=sports%20referee%20controversy%20viral%20meme%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "裁判爭議迷因" },
   { label: "BBC Sport", url: "http://feeds.bbci.co.uk/sport/rss.xml", topic: "BBC 體育快訊" },
   { label: "CBS Sports", url: "https://www.cbssports.com/rss/headlines/", topic: "CBS 體育快訊" }
 ];
@@ -374,6 +378,7 @@ export default function Home() {
                 </div>
               )}
               <p className="text-xs leading-5 text-muted">
+                系統會優先抓台灣球迷容易互動的角度：熱門球星、國際巨星、裁判爭議、迷因梗、交易傷病、逆轉與輸球梗。
                 目前可穩定偵測一般 RSS、Google News RSS、YouTube channel RSS。IG、Threads、TikTok 建議用官方 API、n8n 或 Google Sheet 匯入。
               </p>
             </div>

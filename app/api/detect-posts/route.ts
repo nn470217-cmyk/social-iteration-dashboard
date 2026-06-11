@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { analyzeFanSignals, enrichCopyForTaiwanFans, toChineseSportsTerms } from "@/lib/fanSignals";
 import type { ContentRecord, DetectPostsResult, Platform } from "@/types/social";
 
 interface DetectRequest {
@@ -129,6 +130,8 @@ function genericEntryToRecord(entry: string, input: DetectRequest, index: number
   const link = type === "atom" ? textBetween(entry, "href=\"", "\"") : textBetween(entry, "<link>", "</link>");
   if (!title) return null;
   const chineseCopy = buildDetectedCopy(title, summary, input.defaultTopic || "國外體育新聞");
+  const signals = analyzeFanSignals(`${title} ${summary}`);
+  const localizedTitle = toChineseSportsTerms(title);
   return {
     id: `rss-${hash(`${title}-${pubDate}-${index}`)}`,
     platform: input.platform || "Threads",
@@ -136,9 +139,9 @@ function genericEntryToRecord(entry: string, input: DetectRequest, index: number
     publishedAt: parseDate(pubDate),
     contentType: "文章",
     topic: input.defaultTopic || "國外體育新聞",
-    originalCopy: chineseCopy,
-    imageTitle: buildImageTitle(title, input.defaultTopic || "體育快訊"),
-    videoOpening: `國外體育圈正在討論：${title.slice(0, 42)}`,
+    originalCopy: enrichCopyForTaiwanFans(chineseCopy, title, summary),
+    imageTitle: buildImageTitle(localizedTitle, input.defaultTopic || "體育快訊"),
+    videoOpening: `台灣球迷會吵這題：${signals.tags.slice(0, 3).join("、")}`,
     cta: "留言一起聊",
     views: 0,
     likes: 0,
@@ -147,15 +150,16 @@ function genericEntryToRecord(entry: string, input: DetectRequest, index: number
     saves: 0,
     dms: 0,
     clicks: 0,
-    notes: `RSS 來源：${link || input.accountUrl}`,
+    notes: `RSS 來源：${link || input.accountUrl}\n台灣球迷角度：${signals.angle}\n標籤：${signals.tags.join("、")}`,
     createdAt: new Date().toISOString()
   };
 }
 
 function buildDetectedCopy(title: string, summary: string, topic: string) {
+  const localizedTitle = toChineseSportsTerms(title);
   const context = summary ? `\n\n重點摘要：${summary.slice(0, 160)}` : "";
   return [
-    `國外體育圈正在討論這題：${title}`,
+    `國外體育圈正在討論這題：${localizedTitle}`,
     context,
     "",
     `這則可以延伸成「${topic}」內容：先丟出球迷會想表態的問題，再補上賽事分析與免費看球入口。`,

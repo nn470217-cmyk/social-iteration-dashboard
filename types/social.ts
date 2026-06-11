@@ -2,6 +2,16 @@ export type Platform = "IG" | "Threads" | "TikTok" | "YouTube Shorts";
 export type ContentType = "文章" | "圖片" | "影片" | "限動";
 export type ContentLabel = "爆款" | "潛力" | "普通" | "低效";
 
+export interface AccountSource {
+  id: string;
+  platform: Platform;
+  account: string;
+  accountUrl: string;
+  defaultTopic: string;
+  notes: string;
+  createdAt: string;
+}
+
 export interface ContentRecord {
   id: string;
   platform: Platform;
@@ -69,4 +79,11 @@ export interface AnalysisResult {
   lowProblems: string[];
   nextDirections: string[];
   generated: GeneratedPack;
+}
+
+export interface DetectPostsResult {
+  ok: boolean;
+  message: string;
+  records: ContentRecord[];
+  needsAuth?: boolean;
 }

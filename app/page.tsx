@@ -18,7 +18,8 @@ import {
 import { analyzeRecords } from "@/lib/analyze";
 import { sanitizeText } from "@/lib/safety";
 import { clearRecords, loadRecords, saveRecords } from "@/lib/storage";
-import type { ContentRecord, ContentType, GeneratedPack, Platform } from "@/types/social";
+import { loadSources, saveSources } from "@/lib/storage";
+import type { AccountSource, ContentRecord, ContentType, DetectPostsResult, GeneratedPack, Platform } from "@/types/social";
 
 const platforms: Platform[] = ["IG", "Threads", "TikTok", "YouTube Shorts"];
 const contentTypes: ContentType[] = ["文章", "圖片", "影片", "限動"];
@@ -46,6 +47,18 @@ function newRecord(): ContentRecord {
     saves: 0,
     dms: 0,
     clicks: 0,
+    notes: "",
+    createdAt: new Date().toISOString()
+  };
+}
+
+function newSource(): AccountSource {
+  return {
+    id: createId(),
+    platform: "YouTube Shorts",
+    account: "體育情報站",
+    accountUrl: "",
+    defaultTopic: "賽事討論",
     notes: "",
     createdAt: new Date().toISOString()
   };
@@ -113,18 +126,26 @@ const demoRecords: ContentRecord[] = [
 
 export default function Home() {
   const [records, setRecords] = useState<ContentRecord[]>([]);
+  const [sources, setSources] = useState<AccountSource[]>([]);
   const [draft, setDraft] = useState<ContentRecord>(newRecord());
+  const [sourceDraft, setSourceDraft] = useState<AccountSource>(newSource());
   const [copied, setCopied] = useState("");
   const [aiPack, setAiPack] = useState<GeneratedPack | null>(null);
   const [aiStatus, setAiStatus] = useState("");
+  const [detectStatus, setDetectStatus] = useState("");
 
   useEffect(() => {
     setRecords(loadRecords());
+    setSources(loadSources());
   }, []);
 
   useEffect(() => {
     saveRecords(records);
   }, [records]);
+
+  useEffect(() => {
+    saveSources(sources);
+  }, [sources]);
 
   const analysis = useMemo(() => analyzeRecords(records), [records]);
 
@@ -141,7 +162,9 @@ export default function Home() {
   function clearAll() {
     clearRecords();
     setRecords([]);
+    setSources([]);
     setDraft(newRecord());
+    setSourceDraft(newSource());
   }
 
   function loadDemo() {
@@ -216,6 +239,36 @@ export default function Home() {
     setTimeout(() => setAiStatus(""), 2200);
   }
 
+  async function detectPosts(source = sourceDraft) {
+    setDetectStatus("正在偵測平台內容...");
+    const response = await fetch("/api/detect-posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(source)
+    });
+    const result = (await response.json()) as DetectPostsResult;
+    if (result.records.length) {
+      setRecords((items) => {
+        const existing = new Set(items.map((item) => item.id));
+        const incoming = result.records.filter((item) => !existing.has(item.id));
+        return [...incoming, ...items];
+      });
+    }
+    setDetectStatus(result.message);
+  }
+
+  function saveSource() {
+    const clean: AccountSource = {
+      ...sourceDraft,
+      account: sanitizeText(sourceDraft.account),
+      accountUrl: sanitizeText(sourceDraft.accountUrl),
+      defaultTopic: sanitizeText(sourceDraft.defaultTopic),
+      notes: sanitizeText(sourceDraft.notes)
+    };
+    setSources((items) => [clean, ...items.filter((item) => item.id !== clean.id)]);
+    setSourceDraft(newSource());
+  }
+
   const outputPack = aiPack ?? analysis.generated;
 
   return (
@@ -254,7 +307,46 @@ export default function Home() {
         </section>
 
         <div className="grid gap-5 xl:grid-cols-[440px_1fr]">
-          <Panel title="手動新增內容數據" icon={<Plus size={19} />}>
+          <div className="space-y-5">
+          <Panel title="自動偵測平台帳號" icon={<Sparkles size={19} />}>
+            <div className="grid gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Select label="平台" value={sourceDraft.platform} options={platforms} onChange={(value) => setSourceDraft({ ...sourceDraft, platform: value as Platform })} />
+                <Input label="帳號名稱" value={sourceDraft.account} onChange={(value) => setSourceDraft({ ...sourceDraft, account: value })} />
+              </div>
+              <Input label="帳號網址" value={sourceDraft.accountUrl} onChange={(value) => setSourceDraft({ ...sourceDraft, accountUrl: value })} placeholder="YouTube 請用 /channel/UC... 網址" />
+              <Input label="預設主題" value={sourceDraft.defaultTopic} onChange={(value) => setSourceDraft({ ...sourceDraft, defaultTopic: value })} />
+              <Textarea label="備註" value={sourceDraft.notes} onChange={(value) => setSourceDraft({ ...sourceDraft, notes: value })} />
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => detectPosts()} icon={<Sparkles size={18} />} primary>偵測文章/影片</Button>
+                <Button onClick={saveSource} icon={<Plus size={18} />}>儲存帳號</Button>
+              </div>
+              {detectStatus && <p className="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm leading-6 text-slate-200">{detectStatus}</p>}
+              {sources.length > 0 && (
+                <div className="space-y-2">
+                  {sources.map((source) => (
+                    <div key={source.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-white">{source.account}</p>
+                          <p className="mt-1 text-xs text-gold">{source.platform}｜{source.defaultTopic}</p>
+                          <p className="mt-1 break-all text-xs text-slate-400">{source.accountUrl}</p>
+                        </div>
+                        <button className="text-muted hover:text-white" onClick={() => detectPosts(source)} aria-label="偵測">
+                          <RefreshCw size={17} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs leading-5 text-muted">
+                目前可穩定自動偵測 YouTube channel RSS。IG、Threads、TikTok 需要官方 API、n8n 或 Google Sheet 匯入，避免不穩定爬蟲造成帳號風險。
+              </p>
+            </div>
+          </Panel>
+
+          <Panel title="手動補充 / 校正成效數據" icon={<Plus size={19} />}>
             <div className="grid gap-3">
               <div className="grid grid-cols-2 gap-3">
                 <Select label="平台" value={draft.platform} options={platforms} onChange={(value) => setDraft({ ...draft, platform: value as Platform })} />
@@ -282,6 +374,7 @@ export default function Home() {
               <Button onClick={addRecord} icon={<Plus size={18} />} primary>新增並計分</Button>
             </div>
           </Panel>
+          </div>
 
           <section className="space-y-5">
             <div className="grid gap-5 lg:grid-cols-2">

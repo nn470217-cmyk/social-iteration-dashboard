@@ -19,10 +19,18 @@ import { analyzeRecords } from "@/lib/analyze";
 import { sanitizeText } from "@/lib/safety";
 import { clearRecords, loadRecords, saveRecords } from "@/lib/storage";
 import { loadSources, saveSources } from "@/lib/storage";
-import type { AccountSource, ContentRecord, ContentType, DetectPostsResult, GeneratedPack, Platform } from "@/types/social";
+import type { AccountSource, ContentRecord, ContentType, DetectPostsResult, GeneratedPack, Platform, SourceType } from "@/types/social";
 
 const platforms: Platform[] = ["IG", "Threads", "TikTok", "YouTube Shorts"];
+const sourceTypes: SourceType[] = ["Sports News RSS", "YouTube RSS", "Platform API"];
 const contentTypes: ContentType[] = ["文章", "圖片", "影片", "限動"];
+const rssPresets = [
+  { label: "Google News NBA", url: "https://news.google.com/rss/search?q=NBA%20sports%20news%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "NBA 國外快訊" },
+  { label: "Google News MLB", url: "https://news.google.com/rss/search?q=MLB%20sports%20news%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "MLB 國外快訊" },
+  { label: "Google News Soccer", url: "https://news.google.com/rss/search?q=soccer%20sports%20news%20-betting%20-odds&hl=en-US&gl=US&ceid=US:en", topic: "足球國外快訊" },
+  { label: "BBC Sport", url: "http://feeds.bbci.co.uk/sport/rss.xml", topic: "BBC 體育快訊" },
+  { label: "CBS Sports", url: "https://www.cbssports.com/rss/headlines/", topic: "CBS 體育快訊" }
+];
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -55,6 +63,7 @@ function newRecord(): ContentRecord {
 function newSource(): AccountSource {
   return {
     id: createId(),
+    sourceType: "Sports News RSS",
     platform: "YouTube Shorts",
     account: "體育情報站",
     accountUrl: "",
@@ -150,7 +159,7 @@ export default function Home() {
   const analysis = useMemo(() => analyzeRecords(records), [records]);
 
   function addRecord() {
-    const clean = sanitizeRecord(draft);
+    const clean = ensureRecordCopy(sanitizeRecord(draft));
     setRecords((items) => [clean, ...items]);
     setDraft(newRecord());
   }
@@ -250,7 +259,7 @@ export default function Home() {
     if (result.records.length) {
       setRecords((items) => {
         const existing = new Set(items.map((item) => item.id));
-        const incoming = result.records.filter((item) => !existing.has(item.id));
+        const incoming = result.records.filter((item) => !existing.has(item.id)).map((item) => ensureRecordCopy(item));
         return [...incoming, ...items];
       });
     }
@@ -267,6 +276,17 @@ export default function Home() {
     };
     setSources((items) => [clean, ...items.filter((item) => item.id !== clean.id)]);
     setSourceDraft(newSource());
+  }
+
+  function applyPreset(preset: typeof rssPresets[number]) {
+    setSourceDraft({
+      ...sourceDraft,
+      sourceType: "Sports News RSS",
+      platform: "Threads",
+      account: preset.label,
+      accountUrl: preset.url,
+      defaultTopic: preset.topic
+    });
   }
 
   const outputPack = aiPack ?? analysis.generated;
@@ -311,14 +331,27 @@ export default function Home() {
           <Panel title="自動偵測平台帳號" icon={<Sparkles size={19} />}>
             <div className="grid gap-3">
               <div className="grid grid-cols-2 gap-3">
+                <Select label="來源類型" value={sourceDraft.sourceType} options={sourceTypes} onChange={(value) => setSourceDraft({ ...sourceDraft, sourceType: value as SourceType })} />
                 <Select label="平台" value={sourceDraft.platform} options={platforms} onChange={(value) => setSourceDraft({ ...sourceDraft, platform: value as Platform })} />
-                <Input label="帳號名稱" value={sourceDraft.account} onChange={(value) => setSourceDraft({ ...sourceDraft, account: value })} />
               </div>
-              <Input label="帳號網址" value={sourceDraft.accountUrl} onChange={(value) => setSourceDraft({ ...sourceDraft, accountUrl: value })} placeholder="YouTube 請用 /channel/UC... 網址" />
-              <Input label="預設主題" value={sourceDraft.defaultTopic} onChange={(value) => setSourceDraft({ ...sourceDraft, defaultTopic: value })} />
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="帳號名稱" value={sourceDraft.account} onChange={(value) => setSourceDraft({ ...sourceDraft, account: value })} />
+                <Input label="預設主題" value={sourceDraft.defaultTopic} onChange={(value) => setSourceDraft({ ...sourceDraft, defaultTopic: value })} />
+              </div>
+              <Input label="RSS / 帳號網址" value={sourceDraft.accountUrl} onChange={(value) => setSourceDraft({ ...sourceDraft, accountUrl: value })} placeholder="RSS URL 或 YouTube /channel/UC... 網址" />
+              <div>
+                <p className="label">國外體育 RSS 快速範例</p>
+                <div className="flex flex-wrap gap-2">
+                  {rssPresets.map((preset) => (
+                    <button key={preset.label} onClick={() => applyPreset(preset)} className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-bold text-white hover:bg-white/[0.1]">
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <Textarea label="備註" value={sourceDraft.notes} onChange={(value) => setSourceDraft({ ...sourceDraft, notes: value })} />
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => detectPosts()} icon={<Sparkles size={18} />} primary>偵測文章/影片</Button>
+                <Button onClick={() => detectPosts()} icon={<Sparkles size={18} />} primary>偵測 RSS / 文章 / 影片</Button>
                 <Button onClick={saveSource} icon={<Plus size={18} />}>儲存帳號</Button>
               </div>
               {detectStatus && <p className="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm leading-6 text-slate-200">{detectStatus}</p>}
@@ -341,7 +374,7 @@ export default function Home() {
                 </div>
               )}
               <p className="text-xs leading-5 text-muted">
-                目前可穩定自動偵測 YouTube channel RSS。IG、Threads、TikTok 需要官方 API、n8n 或 Google Sheet 匯入，避免不穩定爬蟲造成帳號風險。
+                目前可穩定偵測一般 RSS、Google News RSS、YouTube channel RSS。IG、Threads、TikTok 建議用官方 API、n8n 或 Google Sheet 匯入。
               </p>
             </div>
           </Panel>
@@ -473,6 +506,18 @@ function sanitizeRecord(record: ContentRecord): ContentRecord {
     videoOpening: sanitizeText(record.videoOpening),
     cta: sanitizeText(record.cta),
     notes: sanitizeText(record.notes)
+  };
+}
+
+function ensureRecordCopy(record: ContentRecord): ContentRecord {
+  if (record.originalCopy.trim()) return record;
+  const topic = record.topic || "體育快訊";
+  const title = record.imageTitle || record.videoOpening || "今晚焦點賽事";
+  return {
+    ...record,
+    originalCopy: sanitizeText(
+      `今晚${topic}討論度正在升溫。\n\n重點先看：${title}\n\n這則內容可以延伸成賽事討論、球迷交流與免費看球入口導流。\n\n你覺得關鍵會在哪裡？留言一起聊。`
+    )
   };
 }
 

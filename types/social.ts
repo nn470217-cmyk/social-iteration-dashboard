@@ -1,9 +1,11 @@
 export type Platform = "IG" | "Threads" | "TikTok" | "YouTube Shorts";
+export type SourceType = "YouTube RSS" | "Sports News RSS" | "Platform API";
 export type ContentType = "文章" | "圖片" | "影片" | "限動";
 export type ContentLabel = "爆款" | "潛力" | "普通" | "低效";
 
 export interface AccountSource {
   id: string;
+  sourceType: SourceType;
   platform: Platform;
   account: string;
   accountUrl: string;

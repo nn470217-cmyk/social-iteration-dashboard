@@ -23,9 +23,13 @@ import type { ContentRecord, ContentType, GeneratedPack, Platform } from "@/type
 const platforms: Platform[] = ["IG", "Threads", "TikTok", "YouTube Shorts"];
 const contentTypes: ContentType[] = ["文章", "圖片", "影片", "限動"];
 
+function createId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function newRecord(): ContentRecord {
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     platform: "Threads",
     account: "體育情報站",
     publishedAt: new Date().toISOString().slice(0, 16),
